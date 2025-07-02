@@ -46,7 +46,7 @@ static int split_url(const char *url,
 }
 
 /* ───────────────────────── single-shot GET ──────────────────────────── */
-static int http_get(const char *host, const char *path, int port)
+static int http_get(const char *host, const char *path, int port, FILE *out)
 {
     WSADATA wsa;
     SOCKET  s = INVALID_SOCKET;
@@ -74,7 +74,7 @@ static int http_get(const char *host, const char *path, int port)
     send(s, req, (int)strlen(req), 0);
 
     while ((n = recv(s, buf, sizeof buf, 0)) > 0) {
-        fwrite(buf, 1, n, stdout);
+        fwrite(buf, 1, n, out);
         total += n;
     }
     fprintf(stderr, "\n[%d bytes]\n", total);
@@ -88,17 +88,59 @@ done:
 /* ─────────────────────────── entry point ────────────────────────────── */
 int main(int argc, char *argv[])
 {
-    if (argc != 2) {
-        puts("usage: mini-wget http://host[:port]/path");
+    const char *output_file = NULL;
+    int binary_mode = 1; /* Default to binary mode as specified in requirements */
+    const char *url = NULL;
+    FILE *out = stdout;
+    int i;
+
+    /* Parse command line arguments */
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-O") == 0) {
+            if (i + 1 >= argc) {
+                fputs("error: -O requires a filename\n", stderr);
+                return 1;
+            }
+            output_file = argv[++i];
+        } else if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--binary") == 0) {
+            binary_mode = 1;
+        } else if (strncmp(argv[i], "http://", 7) == 0) {
+            if (url) {
+                fputs("error: multiple URLs specified\n", stderr);
+                return 1;
+            }
+            url = argv[i];
+        } else {
+            fprintf(stderr, "error: unknown option '%s'\n", argv[i]);
+            return 1;
+        }
+    }
+
+    if (!url) {
+        puts("usage: wget-ce [-O outputfile] [--binary|-b] http://host[:port]/path");
         return 0;
+    }
+
+    /* Open output file if specified */
+    if (output_file) {
+        out = fopen(output_file, binary_mode ? "wb" : "w");
+        if (!out) {
+            perror("fopen");
+            return 1;
+        }
     }
 
     char host[128] = {0}, path[256] = {0};
     int  port = 80;
 
-    if (split_url(argv[1], host, sizeof host, path, sizeof path, &port) != 0) {
+    if (split_url(url, host, sizeof host, path, sizeof path, &port) != 0) {
         fputs("only http:// URLs supported\n", stderr);
+        if (out != stdout) fclose(out);
         return 1;
     }
-    return http_get(host, path, port);
+    
+    int result = http_get(host, path, port, out);
+    
+    if (out != stdout) fclose(out);
+    return result;
 }
