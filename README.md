@@ -7,5 +7,5 @@ Implementation made with help of ChatGPT o3 and Perplexity Pro.
 
 Last Updated: 7/23/2025 10:46AM JST
 
-- mini_wget_ce.c is the working version (source code)
+- mini_wget_ce.c is the lateset working version (source code with binary mode support)
 - binary is in release folder.
